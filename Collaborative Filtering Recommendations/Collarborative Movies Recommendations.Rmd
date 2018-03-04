@@ -1,0 +1,179 @@
+# IE - Master in Business Analytics and Big Data
+Recommendation Systems
+
+Building a Collaborative Filtering Engine
+
+Author: Mateusz Cytrowski
+
+========================================================
+
+# Initialization
+
+Import libraries
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggrepel)
+library(data.table)
+library(ggpubr)
+library(dplyr)
+
+```
+
+Load the critics dataset.
+
+```{r}
+setwd('C:/Users/mcytr_000/Desktop/Search Engines/IE-Lab1')
+critics <- read.csv2('critics.csv', sep = ",")
+critics <- as.data.frame(critics)
+
+```
+
+Cleaning the titles
+
+```{r}
+#storing titles in separate variable
+titles <- colnames(critics)
+
+#removing the dots and spaces
+titles <- gsub("\\.", " ", titles)
+titles <- gsub("\\s+", " ", titles)
+
+#changing the column names
+colnames(critics) <- titles
+
+```
+
+
+# 1) Pearson correlation coefficient 
+Calculate the Pearson correlation coefficient between Victoria and Nuria
+
+**Expected correlation between Victoria and Nuria**: 0.3651484
+
+```{r fig.width=7, fig.height=6}
+
+Nuria <- as.numeric(as.vector(critics[which(critics$User == 'Nuria'), -1]))
+Victoria <- as.numeric(as.vector(critics[which(critics$User == 'Victoria'), -1]))
+
+Cor1 <- round(cor(Nuria, Victoria,use = 'complete.obs', method = 'pearson'), 6)
+
+print(paste0('Correlation between Victoria and Nuria: ', Cor1))
+
+```
+
+# 2) Compare two movie critics
+Using the calculated Pearson correlation in the previous section. Compare and show the movie ratings for Victoria and Nuria on a scatter plot. How is this compared with the same ratings of Maria and Nerea on a scatter plot? What about Chris and Jim? What it means?
+
+```{r fig.width=7, fig.height=6, message=FALSE, warning=FALSE}
+# Transposing table for easier plot creation
+critics_t <- as.data.frame(t(critics[,-1]))
+colnames(critics_t) <- critics$User
+
+# Creating plots
+
+p1 <- ggplot(critics_t, aes(x=Victoria, y=Nuria)) + 
+  geom_point() + 
+  geom_text_repel(aes(label = rownames(critics_t)), size = 4) + 
+  ggtitle("Victoria & Nuria") + 
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+p2 <- ggplot(critics_t, aes(x=Maria, y=Nerea)) + 
+  geom_point() + 
+  geom_text_repel(aes(label = rownames(critics_t)), size = 4) + 
+  ggtitle("Maria & Nerea") +
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+p3 <- ggplot(critics_t, aes(x=Chris, y=Jim)) + 
+  geom_point() + 
+  geom_text_repel(aes(label = rownames(critics_t)), size = 4) + 
+  ggtitle("Chris & Jim") +
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+p1
+p2
+p3
+
+
+
+```
+
+### Answer
+##### It means probably that we should not expect high correlation results between users however it is not impossible looking at the Chris and Jim.
+##### Higher correlation results might pushed by the popular titles with overall high average rating.
+
+
+
+# 3) Top Recommendations 
+Get the top 5 movies recommended for Victoria. by using a weighted average of every other critic's rankings.
+
+**Expected result**:
+3.7917013044215, 'The Matrix'
+3.50776533175371, 'Forrest Gump'     
+3.33118834864677, 'The Sixth Sense' 
+3.11491825315719, 'Shakespeare in Love'
+2.9124513228665, 'Blade Runner'
+
+```{r fig.width=7, fig.height=6}
+# Adding the average by Row
+critics$average <- rowMeans(critics[,-1], na.rm = TRUE)
+
+# Adding the weighted score - correlation between Victoria and other critics scores 
+critics_t <- as.data.frame(t(critics[,-c(1,ncol(critics))]))
+personV <- as.numeric(as.vector(cor(critics_t[,15], critics_t, use = "pairwise.complete.obs", method = 'pearson')))
+
+critics$weighted <- personV
+
+# Creating data frame with scaled values of the reviews - substracting the average of user from each of his ratings
+criticsSC <- critics[, -c(1, 22, 23)] - critics$average
+
+criticsSC$weighted <- critics$weighted
+row.names(criticsSC) <-critics$User
+
+
+# Creating the sum of all weighted values
+denominator <- sum(abs(critics[-15,23]))
+
+# Victoria Average Result
+VicAvg <- critics[15,22]
+
+# Creating list of the films that Victoria has not seen
+x <- is.na(criticsSC[15,])
+
+# Creating a weighted and scaled set of results
+criticsPersonalized <- criticsSC[-15,] * criticsSC[-15,21]
+
+# Calculating the predicted results for victoria ratings
+recommendations <- sapply(criticsPersonalized[,x], function(y) VicAvg + (sum(y, na.rm = TRUE) / denominator))
+
+recommendations <- as.data.frame(sort(recommendations, decreasing = TRUE))
+colnames(recommendations) <- 'Predicted Result'
+print (recommendations)
+
+
+```
+
+##### I see one potential space for change in the formula used below. For the denominator we have used the sum of ALL pearson correlations. In this case it was not a problem since all the users were had at least one review of the film that Victoria has not seen. In reality and larger dataset it might not be the case. We should remember to use probably only the results for the users whose scaled ratings will be calculated in nominator.
+
+
+# 4) Top similar critics
+Return the top 5 critics that are most similar to Victoria. 
+
+**Expected result**:
+0.9449112, 'Rachel'
+0.5976143, 'Ana' 
+0.5789794, 'Oriol'
+0.4925922, 'Maria'
+0.4273247, 'Carles'
+
+```{r fig.width=7, fig.height=6}
+
+# Creating the result using the pearson correlation calculated for the previous task
+similar <- critics[-15, c(1,23)]
+similar <- similar[order(-similar$weighted),]
+rownames(similar) <- c()
+
+print(head(similar, 5))
+
+
+
+```
