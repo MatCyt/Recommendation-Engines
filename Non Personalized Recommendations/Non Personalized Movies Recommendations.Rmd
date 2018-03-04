@@ -1,0 +1,392 @@
+# IE - Master in Business Analytics and Big Data
+Recommendation Systems
+
+Building a Non Personalized Recommendation Engine
+
+Author: Mateusz Cytrowski
+
+========================================================
+
+# Initialization
+
+Import libraries
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library(reshape2)
+library(data.table)
+library(dplyr)
+
+```
+
+Load the critics dataset.
+
+```{r}
+
+critics <- read.csv2('critics.csv', sep = ",")
+critics <- as.data.frame(critics)
+
+#Visualizing and checking the data
+str(critics)
+
+critics
+```
+
+Deleting the dots and spaces from the column names to match the **Expected Result** form later on.
+
+```{r}
+#storing titles in separate variable
+titles <- colnames(critics)
+
+#removing the dots and spaces
+titles <- gsub("\\.", " ", titles)
+titles <- gsub("\\s+", " ", titles)
+
+#changing the column names
+colnames(critics) <- titles
+
+colnames(critics)
+
+```
+
+
+
+# 1) Top 5 Movies, by rating mean
+Calculate mean rating for each movie, ordered with the highest rating listed first, and plot the top 5.
+
+**Expected result**:
+3.600000, 'The Shawshank Redemption'
+3.266667, 'Star Wars IV - A New Hope'
+3.222222, 'Blade Runner'
+3.166667, 'Groundhog Day'
+3.062500, 'The Silence of the Lambs'
+
+```{r fig.width=7, fig.height=6}
+# Calculating the mean for each movie(column) in decreasing order
+films_means <- sort(colMeans(critics[ , 2:21], na.rm = TRUE), decreasing = TRUE)
+
+# Creating the data frame with top 5 results
+top5means <- as.data.frame(head(films_means, 5))
+
+# Changing the column name and printing the results
+colnames(top5means) <- 'Top 5 Movies, by rating mean'
+print(top5means)
+
+```
+
+# 2) Top 5 Movies, by rating distribution
+Calculate the percentage of ratings for each movie that are 4 stars or higher. Order with the highest percentage first, and plot the top 5 movies with more high ratings distribution.
+
+**Expected result**:
+0.7000000, 'The Shawshank Redemption'
+0.5333333, 'Star Wars IV - A New Hope'
+0.5000000, 'Gladiator'
+0.4444444, 'Blade Runner'
+0.4375000, 'The Silence of the Lambs'
+
+```{r fig.width=7, fig.height=6}
+# Creating a count of all values by column
+counttotal <- sapply(critics[, -1], function(y) sum(length(which(!is.na(y)))))
+
+# Creating a count of all values greater or equal 4 by column
+countgreater <- sapply(critics[, -1], function(x) sum(length(which(x >= 4))))
+
+# Creating ranking
+rating <- countgreater / counttotal
+
+# Creating data frame with top 5 positions
+ratingtop5 <- as.data.frame(head(sort(rating, decreasing = TRUE), 5))
+
+# Changing the column name and printing the result
+colnames(ratingtop5) <- 'Top 5 Movies, by rating distribution'
+ratingtop5
+
+```
+
+# 3) Top 5 Movies, by quantity of ratings
+Count the number of ratings for each movie, order the one with most number of ratings first, submit the top 5.
+
+**Expected result**:
+17, 'Toy Story'
+16, 'The Silence of the Lambs'
+15, 'Star Wars IV - A New Hope'
+14, 'Star Wars VI - Return of the Jedi'
+13, 'Independence Day'
+
+```{r fig.width=7, fig.height=6}
+#creating the total count of ratings per film as in example 2)
+counttotal <- sapply(critics[, -1], function(y) sum(length(which(!is.na(y)))))
+
+#Creating data frame with top 5 films
+counttop5 <- as.data.frame(head(sort(counttotal, decreasing = TRUE), 5))
+
+#Changing the column name and printing top 5 movies
+colnames(counttop5) <- 'Top 5 Movies by quantity of ratings'
+counttop5
+
+```
+
+# 4) People who watched Star Wars IV also watched ...
+Calculate movies that most often occur with other movie. For each movie, calculate the percentage of the other movie raters who also rated that movie. Order with the highest percentage first, and submit the top 5. Select "Star.Wars.IV...A.New.Hope" movie by defaut. Use the (x+y)/x method.
+
+Top Occurences:
+0.9333333, 'Toy Story'
+0.8666667, 'Star Wars: Episode VI - Return of the Jedi'
+0.8000000, 'The Silence of the Lambs'
+0.7333333, 'Independence Day'
+0.6666667, 'Total Recall'
+
+```{r fig.width=7, fig.height=6}
+
+# Leaving only full rows in Star Wars IV in a new dataset
+starwars <- critics[complete.cases(critics[, 2]), ]
+
+# With only complete cases in Star Wars IV (basically a left join) all the reviews from remaining films are associated
+associationSW <- sapply(starwars[, -c(1,2)], function(y) sum(length(which(!is.na(y)))))
+
+# Creating Star Wars IV total count
+countSW <- sum(length(complete.cases(starwars[ ,2])))
+
+# Calculating the percentage of the other movie raters who also rated that movie
+outputSW <- associationSW / countSW
+
+# Creating a data frame with top 5 results
+outputSW <- as.data.frame(head(sort(outputSW, decreasing = TRUE), 5))
+
+# Changing the column name and printing the result
+colnames(outputSW) <- 'People who watched Star Wars IV also watched'
+outputSW
+
+```
+
+
+# 5) People who liked Babe also liked ...
+Calculate the movies better rated of people who liked a movie. Select the people who liked the movie "Babe" (4 or 5 stars) and provide the top 5 movies they liked most.
+
+**Expected result**:
+5.000, 'Pulp.Fiction'
+5.000, 'Groundhog.Day'
+4.500, 'The.Shawshank.Redemption'
+4.333, 'Toy.Story'
+4.000, 'Blade.Runner'
+
+```{r fig.width=7, fig.height=6}
+
+# Leaving only full rows in Babe in a new dataset
+babe <- critics[complete.cases(critics[, 'Babe']), ]
+
+# Leaving only rows in which the Babe rating is equal or higher than 4 and deleting the "User" column
+babe <- babe[which(babe$Babe >= 4), ]
+
+# Counting the reviews of other films present for reviews of Babe higher or equal 4 (without columns "Babe" and "User")
+outputBabe <- sapply(babe[, -c(1, 21)], function(y) mean(y, na.rm = TRUE))
+
+# Creating a data frame with top 5 results
+outputBabe <- as.data.frame(head(sort(outputBabe, decreasing = TRUE), 5))
+
+# Changing the column name and printing the result
+colnames(outputBabe) <- 'People who liked Babe also liked...'
+outputBabe
+
+```
+
+# 6) MovieLens
+Explore a real data set and provide non-personalized ratings. You can use the MovieLens database. You can find MovieLens' dataset here: http://files.grouplens.org/datasets/movielens/ml-10m-README.html
+
+### Data Processing
+Load the MovieLens dataset.
+For the sake of making the operations faster I used the small Movielens Dataset available on the website : 100,000 ratings and 1,300 tag applications applied to 9,000 movies by 700 users.
+
+```{r}
+movies <- as.data.frame(read.csv2('movies.csv', sep = ","))
+ratings <- as.data.frame(read.csv2('ratings.csv', sep = ","))
+
+
+#Quick data check before pre-processing
+
+str(movies)
+str(ratings)
+
+```
+
+
+ Tags datatable why extremely useful for other analysis will not come in handy for non-personalized ratings. 
+We can also delete the timestamp from the ratings dataset and use the movies dataset as a lookup table for the movies title.
+We will rename the columns for easier use.
+
+### Dataset Exploration Notes
+
+##### With this specific dataset and this big amount of features it is extremely difficult to run a full exploration besides going over the summary and structure.
+1. We already go over the most frequent and most imporant films in further excercies
+2. NAs is not our concern in this specific analysis
+3. Outliers are also not our concern in this dataset
+4. Due to the size of the dataset (specifically amount of films) running any visual analysis (boxplots or histograms) is just not feasible.
+
+
+
+```{r}
+
+# Deleting the timestampt column
+ratings <- ratings[, -4]
+
+# Adding the movie title to the ratings dataset by joining it with movies (plyr package)
+ratingsfull <- left_join(ratings, movies, by = "movieId", type = "left", match = "all")
+
+# Deleting genres and movieId columns
+ratingsfull <- ratingsfull[, -c(2,5)]
+
+# Renaming the columns
+colnames(ratingsfull) <- c('id', 'rating', 'title')
+
+# Changing rating into numeric values
+ratingsfull$rating <- as.numeric(ratingsfull$rating)
+
+# Checking the summary and structure of ratings dataset in current form - measures of central tendency
+summary(ratingsfull)
+str(ratingsfull)
+
+```
+
+
+
+### Top 10 movies with most reviews
+
+
+```{r, warning=FALSE}
+
+# Aggregating data by movie title and calculating the mean
+Count <- ratingsfull %>% group_by(title) %>% summarise(rating = length(rating))
+
+# Selecting top 10 movies
+Count10 <- as.data.frame(head(Count[order(Count$rating, decreasing = TRUE),  ], 10))
+print(Count10)
+
+
+```
+
+### Top 10 movies with highest average rating
+We can also show 10 movies with the highest average rating value
+
+```{r}
+
+# Aggregating data by movie title and calculating the mean
+mean <- ratingsfull %>% group_by(title) %>% summarise(rating = mean(rating))
+
+# Selecting top 10 movies
+mean10 <- as.data.frame(head(mean[order(mean$rating, decreasing = TRUE),  ], 10))
+print(mean10)
+
+```
+
+### Adjusted average rating value
+However this result is not very informative. 
+We are including also movies with only one results with only one review and receiving a superficial rating average.
+We should calculate this average only on movies that have received, let's say, 10 reviews or more.
+
+Since there is no easy way to modify the previous function we would have to go in longer way and divide the count by sum.
+
+```{r}
+
+# Creating the count (repeating the step from set above)
+count <- ratingsfull %>% group_by(title) %>% summarise(rating = length(rating))
+
+#Selecting only the films with more than 10 reviews
+count10 <- count[count$rating >= 10, ]
+
+# Creating the aggregated sums of reviews per film title
+sumreviews <- ratingsfull %>% group_by(title) %>% summarise(rating = sum(rating))
+
+# Chaging the column names before the join
+colnames(count10) <- c('title', 'count')
+colnames(sumreviews) <- c('title', 'sum')
+
+# We have to join the tables since due to size difference we cannot simply divide them to get the average
+meanHigh <- left_join(count10, sumreviews, by = "title", type = "left", match = "all")
+meanHigh$average <- round(meanHigh$sum / meanHigh$count, 2)
+
+meanHigh <- meanHigh[, -c(2,3)]
+
+
+# Selecting top 10 movies
+meanHigh10 <- as.data.frame(head(meanHigh[order(meanHigh$average, decreasing = TRUE),  ], 10))
+colnames(meanHigh10) <- c('Title', 'Average Rating')
+print(meanHigh10)
+
+```
+
+### Rating distribution
+We can also show movies rating distribution - showing movies % of reviews of 8 and higher.
+This time we will do it only for the film who got more than 20 reviews.
+
+```{r}
+
+# Creating the count (repeating the step from set above)
+count <- ratingsfull %>% group_by(title) %>% summarise(rating = length(rating))
+
+# Creating the count of ratings equal or greater than seven
+countdistribution <- ratingsfull %>% group_by(title) %>% summarise(rating = length(which(rating >= 8)))
+
+# Selecting only films with more than 20 reviews and joining the counts
+count20 <- count[count$rating >= 20, ]
+
+colnames(countdistribution) <- c('Title', '>8')
+colnames(count20) <- c('Title', 'Count')
+
+highresults <- left_join(count20, countdistribution, by = "Title", type = "left", match = "all")
+
+#Calculating the distribution and deleting unnecessary columns
+highresults$distribution <- round(highresults$`>8` / highresults$Count, 2)
+highresults <- highresults[, -c(2,3)]
+
+# Selecting top 10 movies
+highresults10 <- as.data.frame(head(highresults[order(highresults$distribution, decreasing = TRUE),  ], 10))
+colnames(highresults10) <- c('Title', 'High Rating Distribution')
+print(highresults10)
+
+
+```
+
+### Transforming Dataset
+We can now reshape the dataset to move particular movies into columns using reshape package. We will achieve similar format as in first excercises to ease working with this task.
+
+```{r message=FALSE, warning=FALSE}
+# Reshaping the table and moving films into columns
+ratings_t <- dcast(ratingsfull, id~title, fun = NULL, value.var = "rating")
+
+#replace 0 with NA
+ratings_t[ratings_t == 0] <- NA
+
+```
+
+### People who watched Jurassic Park also watched...
+Finally we can evaluate what else was seen by people who saw a particular movie.
+In this case it would make most sense to choose some title that was having a significant amount of reviews. Based on the previous results we can select for example Jurassic Park (1993)
+
+```{r fig.width=7, fig.height=6}
+
+# People who watched Jurassic Park (1993) also watched...
+
+# Leaving only full rows of Jurassic Park in a new dataset
+ratings_t_JurrasicPark <- ratings_t[complete.cases(ratings_t[, 'Jurassic Park (1993)']), ]
+
+# All the remaining views from other columns are associated with Jurasic Park therefor we can now count of ratings in them
+
+which(colnames(ratings_t_JurrasicPark)=="Jurassic Park (1993)" )
+
+associationJP <- sapply(ratings_t_JurrasicPark[, -c(1, 4314)], function(y) sum(length(which(!is.na(y)))))
+countJP <- sum(length(complete.cases(ratings_t_JurrasicPark[,'Jurassic Park (1993)'])))
+
+outputJP <- associationJP / countJP
+
+# Creating a data frame with top 5 results
+outputJP <- as.data.frame(head(sort(outputJP, decreasing = TRUE), 10))
+
+# Changing the column name and printing the result
+colnames(outputJP) <- 'People who watched Jurassic Park also watched'
+print(outputJP)
+
+```
+
+
+
+#### All those steps could be merged into functions (ex. OthersWatched('FilmTitle')) but it would be counter-productive in RMarkdown
+
